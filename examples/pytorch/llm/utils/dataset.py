@@ -37,6 +37,45 @@ def get_alpaca_zh_dataset() -> HfDataset:
         'AI-ModelScope/alpaca-gpt4-data-zh', split='train').to_hf_dataset()
     return _processing_alpaca(dataset_zh)
 
+def get_instinwild_zh_dataset() -> HfDataset:
+    dataset_zh: HfDataset = MsDataset.load(
+        'wyj123456/instinwild', subset_name='default',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_zh)
+
+def get_instinwild_en_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/instinwild', subset_name='subset',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_code_alpaca_en_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/code_alpaca_en',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_Guanaco_chat_all_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/GuanacoDataset',subset_name='default',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_Guanaco_no_chat_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/GuanacoDataset',subset_name='subset',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_GPT4all_en_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/GPT4all',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_instruct_en_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/instruct',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
+
+def get_finance_en_dataset() -> HfDataset:
+    dataset_en: HfDataset = MsDataset.load(
+        'wyj123456/finance_en',split='train').to_hf_dataset()
+    return _processing_alpaca(dataset_en)
 
 def process_dataset(dataset: HfDataset, dataset_test_size: float,
                     dataset_sample: Optional[int],
@@ -53,6 +92,15 @@ def process_dataset(dataset: HfDataset, dataset_test_size: float,
 DATASET_MAPPING = {
     'alpaca-en': get_alpaca_en_dataset,
     'alpaca-zh': get_alpaca_zh_dataset,
+    'instinwild-zh': get_instinwild_zh_dataset,
+    'instinwild-en': get_instinwild_en_dataset,
+    'code-alpaca-en': get_alpaca_en_dataset,
+    'Guanaco-chat-all': get_Guanaco_chat_all_dataset,
+    'Guanaco-no-chat': get_Guanaco_no_chat_dataset,
+    'GPT4all-en': get_GPT4all_en_dataset,
+    'instruct-en': get_instruct_en_dataset,
+    'finance-en': get_finance_en_dataset,
+
 }
 
 
