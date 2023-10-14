@@ -181,6 +181,57 @@ def _preprocess(
     return {'input_ids': input_ids, 'labels': labels}
 
 
+def convert_chatml_to_query_response_history(
+        example: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert chatml format to query/response format.
+        from:
+        {"messages": [
+           {"role": "system", "content": "You are a helpful assistant."},
+           {"role": "user", "content": "prompt1"},
+           {"role": "assistant", "content": "completion1"},
+           {"role": "user", "content": "prompt2"},
+           {"role": "assistant", "content": "completion2"},
+           {"role": "user", "content": "prompt"},
+           {"role": "assistant", "content": "completion"},
+        ]} to
+        {
+            "system": "You are a helpful assistant.",
+            "query": "prompt",
+            "response": "completion",
+            "history": [("prompt1","completion1"),("prompt2","completion2")]
+        }
+        consider system might be missed, so set default system as "You are a helpful assistant."
+    """
+    messages = example['messages']
+
+    system = DEFAULT_SYSTEM
+    if messages[0]['role'] == 'system':
+        system = messages[0]['content']
+        messages = messages[1:]
+
+    assert len(messages) >= 2, 'at least 2 messages'
+
+    history = []
+    for i in range(0, len(messages), 2):
+        assert messages[i]['role'] == 'user'
+        if i + 1 == len(messages):
+            history.append((messages[i]['content'],
+                            None))  # last assistant might be missing
+        else:
+            assert messages[i + 1]['role'] == 'assistant'
+            history.append(
+                (messages[i]['content'], messages[i + 1]['content']))
+
+    query, response = history.pop(len(history) - 1)
+
+    return {
+        'system': system,
+        'query': query,
+        'response': response,
+        'history': history
+    }
+
+
 def get_preprocess(
     template_type: str,
     tokenizer: PreTrainedTokenizer,
@@ -190,6 +241,8 @@ def get_preprocess(
 
     def preprocess(example: Dict[str, Any],
                    generation_mode: bool = False) -> Dict[str, List[int]]:
+        if 'messages' in example:
+            example = convert_chatml_to_query_response_history(example)
         history: Optional[History] = example.get('history', None)
         query: str = example['query']
         response: str = example.get('response', None)
