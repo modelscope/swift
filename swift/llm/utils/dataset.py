@@ -110,6 +110,7 @@ class DatasetName:
     # example dataset for specific model
     cls_fudan_news_zh = 'cls-fudan-news-zh'  # seqgpt-560m
     ner_java_zh = 'ner-jave-zh'  # seqgpt-560m
+    long_alpaca_12k = 'long-alpaca-12k'
 
     # multi-modal
     # for qwen-vl
@@ -455,6 +456,24 @@ def _repair_ms_bench(conversations: str) -> Dict[str, str]:
         if 'moss' in value or 'human:' in value or 'assistant:' in value:
             return
     return conversations
+
+
+def long_alpaca_preprocessor(dataset: HfDataset):
+    def map_row(row):
+        response = row['response']
+        if response.startswith('Answer:'):
+            response = response[len('Answer:') + 1:].strip()
+        return {'response': response}
+    return dataset.rename_columns({'instruction': 'query', 'output': 'response'})\
+        .remove_columns(['input', 'file']).map(map_row)
+
+
+register_dataset(
+    DatasetName.long_alpaca_12k,
+    'AI-ModelScope/LongAlpaca-12k', ['train'], [],
+    long_alpaca_preprocessor,
+    get_dataset_from_repo,
+    tags=['longlora', 'QA'])
 
 
 register_dataset(

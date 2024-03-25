@@ -96,7 +96,6 @@ def prepare_model(model, args: SftArguments):
                 longlora_config = LongLoRAConfig(
                     lora_dtype=args.lora_dtype,
                     model_type=LongLoRAModelType.LLAMA,
-                    use_flash_attn=args.use_flash_attn,
                     **lora_kwargs)
                 model = Swift.prepare_model(model, longlora_config)
                 logger.info(f'longlora_config: {longlora_config}')

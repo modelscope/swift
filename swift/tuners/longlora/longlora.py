@@ -25,7 +25,6 @@ class LongLoRAConfig(LoRAConfig):
         embedder_and_normalizer: LongLoRA allows the embedder and normalizer to be trainable, this parameter specifies
             the names of the embedders and normalizers.
         model_type: The model type, now support llama only
-        use_flash_attn: Use flash attention version of forward
         group_size_ratio: The group size window ratio of the sequence length.
             Note: The sequence length should be split to smaller sequences by the ratio.
     """
@@ -42,9 +41,6 @@ class LongLoRAConfig(LoRAConfig):
         metadata={
             'help': 'The model type, now only support `llama` structure.'
         })
-
-    use_flash_attn: bool = field(
-        default=False, metadata={'help': 'Use flash attention or not.'})
 
     group_size_ratio: float = field(
         default=0.25, metadata={'help': 'The S2 attention group ratio'})
@@ -84,7 +80,7 @@ class LongLoRA(LoRA):
 
         if config.model_type == LongLoRAModelType.LLAMA:
             from .llama import replace_llama_attn
-            replace_llama_attn(model, use_flash_attn=config.use_flash_attn)
+            replace_llama_attn(model)
             # only support code base from transformers
             model.config.group_size_ratio = config.group_size_ratio
 
