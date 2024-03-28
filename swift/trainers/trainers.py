@@ -1,6 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import time
+from types import MethodType
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -45,6 +46,7 @@ class Seq2SeqTrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             self.model.get_trainable_parameters() if hasattr(
                 self.model, 'get_trainable_parameters') else None,
         }
+        self._drop_data_by_gradient_accumulation_steps()
 
     def train(self, *args, **kwargs) -> torch.Tensor:
         res = super().train(*args, **kwargs)
@@ -261,6 +263,39 @@ class Seq2SeqTrainer(PushToMsHubMixin, SwiftMixin, HfSeq2SeqTrainer):
             self._custom_metrics[
                 'acc'] += acc / self.args.gradient_accumulation_steps
         return (loss, outputs) if return_outputs else loss
+
+    def _drop_data_by_gradient_accumulation_steps(self):
+        # fix epoch log for transformers.Trainer._inner_training_loop
+
+        def get_train_dataloader(self, *args, **kwargs):
+            origin_loader = self.original_get_train_dataloader(*args, **kwargs)
+            length = len(origin_loader) // grad_acc_steps * grad_acc_steps
+            origin_loader_type = type(origin_loader)
+            loader = type(origin_loader_type.__name__, (origin_loader_type, ),
+                          {'__len__': lambda _: length})(
+                              origin_loader.dataset)
+            loader.__dict__.update(origin_loader.__dict__)
+            loader._original_get_iterator = loader._get_iterator
+            loader._get_iterator = MethodType(_get_iterator, loader)
+            return loader
+
+        def _get_iterator(self):
+            iterator = self._original_get_iterator()
+            iterator._valid_length = len(self)
+            iterator._original_next_data = iterator._next_data
+            iterator._next_data = MethodType(_next_data, iterator)
+            return iterator
+
+        def _next_data(self):
+            if self._num_yielded >= self._valid_length:
+                raise StopIteration
+            return self._original_next_data()
+
+        grad_acc_steps = self.args.gradient_accumulation_steps
+        if grad_acc_steps is None or grad_acc_steps <= 1:
+            return
+        self.original_get_train_dataloader = self.get_train_dataloader
+        self.get_train_dataloader = MethodType(get_train_dataloader, self)
 
 
 # monkey patching
