@@ -272,7 +272,7 @@ class SwiftModel(nn.Module):
                         'Cannot set one parameter to different param groups')
                 if param_names and param_group:
                     all_param_names.update(param_names)
-                    param_groups.append(param_group)
+                    param_groups.extend(param_group)
 
         decay_parameters = Trainer.get_decay_parameter_names(None, self.model)
         param_groups.extend([
@@ -790,11 +790,8 @@ class Swift:
 
         if isinstance(config, (SwiftConfig, dict)):
             return SwiftModel(model, config, **kwargs)
-        elif isinstance(
-                config,
-                PeftConfig) or config.__class__.__name__ == 'PeftWrapper':
+        else:
             return get_peft_model(model, config, **kwargs)
-        raise ValueError(f'Unsupported swift config type: {config.__class__}')
 
     @staticmethod
     def merge_and_unload(model: Union[PeftModel, SwiftModel], **kwargs):

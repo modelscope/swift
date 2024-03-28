@@ -240,8 +240,10 @@ def llm_sft(args: SftArguments) -> Dict[str, Union[str, Any]]:
         if args.push_to_hub:
             trainer._add_patterns_to_gitignore(['images/'])
             trainer.push_to_hub()
-    return {
+    run_info = {
         'memory': trainer.perf['memory'],
+        'gen_time': trainer.perf['gen_time'],
+        'gen_len': trainer.perf['gen_len'],
         'train_time': train_time,
         'last_model_checkpoint': last_model_checkpoint,
         'best_model_checkpoint': trainer.state.best_model_checkpoint,
@@ -251,6 +253,10 @@ def llm_sft(args: SftArguments) -> Dict[str, Union[str, Any]]:
         'model_info': model_info,
         'dataset_info': dataset_info,
     }
+    jsonl_path = os.path.join(args.output_dir, 'logging.jsonl')
+    with open(jsonl_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(run_info) + '\n')
+    return run_info
 
 
 sft_main = get_main(SftArguments, llm_sft)

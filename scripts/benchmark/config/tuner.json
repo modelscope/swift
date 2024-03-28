@@ -1,0 +1,222 @@
+{
+    "cmd": "sft",
+    "requirements":{
+        "gpu": "1",
+        "ddp": "1"
+    },
+    "eval_requirements": {
+      "gpu": "1"
+    },
+    "eval_dataset": ["mmlu", "ceval", "gsm8k", "arc", "bbh"],
+    "args": {
+      "model_type": "qwen-7b-chat",
+      "dataset": "ms-agent",
+      "train_dataset_mix_ratio": 2.0,
+      "batch_size": 2,
+      "max_length": 2048,
+      "use_loss_scale": true,
+      "gradient_accumulation_steps": 4,
+      "learning_rate": 5e-5,
+      "use_flash_attn": true,
+      "eval_steps": 2000,
+      "save_steps": 2000,
+      "train_dataset_sample": -1,
+      "val_dataset_sample": 5000,
+      "num_train_epochs": 2,
+      "check_dataset_strategy": "none",
+      "gradient_checkpointing": true,
+      "weight_decay": 0.01,
+      "warmup_ratio": 0.03,
+      "save_total_limit": 2,
+      "logging_steps": 10
+    },
+    "experiment": [
+      {
+        "name": "lora",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32
+        }
+      },
+      {
+        "name": "lora+",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32,
+          "lora_lr_ratio": 16.0
+        }
+      },
+      {
+        "name": "rslora",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32,
+          "use_rslora": true
+        }
+      },
+      {
+        "name": "dora",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32,
+          "use_dora": true
+        }
+      },
+      {
+        "name": "lora+neftune",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32,
+          "neftune_noise_alpha": 15.0
+        }
+      },
+      {
+        "name": "llamapro",
+        "args": {
+          "sft_type": "llamapro",
+          "llamapro_num_new_blocks": "4"
+        }
+      },
+      {
+        "name": "full",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full"
+        }
+      },
+      {
+        "name": "full+galore128",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "use_galore": "true",
+          "galore_rank": "128",
+          "galore_update_proj_gap": "200",
+          "galore_optim_per_parameter": "false",
+          "galore_with_embedding": "false"
+        }
+      },
+      {
+        "name": "full+galore64",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "use_galore": "true",
+          "galore_rank": "64",
+          "galore_update_proj_gap": "200",
+          "galore_optim_per_parameter": "false",
+          "galore_with_embedding": "false"
+        }
+      },
+      {
+        "name": "full+galore32",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "use_galore": "true",
+          "galore_rank": "32",
+          "galore_update_proj_gap": "200",
+          "galore_optim_per_parameter": "false",
+          "galore_with_embedding": "false"
+        }
+      },
+      {
+        "name": "full+galore_emb",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "use_galore": "true",
+          "galore_rank": "128",
+          "galore_update_proj_gap": "200",
+          "galore_optim_per_parameter": "false",
+          "galore_with_embedding": "true"
+        }
+      },
+      {
+        "name": "full+galore_perparam",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "use_galore": "true",
+          "galore_rank": "128",
+          "galore_update_proj_gap": "200",
+          "galore_optim_per_parameter": "true",
+          "galore_with_embedding": "false"
+        }
+      },
+      {
+        "name": "adalora",
+        "args": {
+          "sft_type": "adalora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32
+        }
+      },
+      {
+        "name": "adapter",
+        "args": {
+          "sft_type": "adapter"
+        }
+      },
+      {
+        "name": "ia3",
+        "args": {
+          "sft_type": "ia3",
+          "ia3_target_modules": "ALL",
+          "ia3_feedforward_modules": "mlp.gate_proj mlp.up_proj mlp.down_proj"
+        }
+      },
+      {
+        "name": "lora+no_mix",
+        "info": "lora无混合数据集",
+        "args": {
+          "sft_type": "lora",
+          "lora_target_modules": "ALL",
+          "lora_rank": 8,
+          "lora_alpha": 32,
+          "train_dataset_mix_ratio": 0.0
+        }
+      },
+      {
+        "name": "full+no_mix",
+        "info": "全参无混合数据集",
+        "requirements":{
+          "gpu": "1",
+          "ddp": "1"
+        },
+        "args": {
+          "sft_type": "full",
+          "train_dataset_mix_ratio": 0.0
+        }
+      }
+    ]
+}

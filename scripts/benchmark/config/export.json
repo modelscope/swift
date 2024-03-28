@@ -1,0 +1,44 @@
+{
+    "cmd": "export",
+    "args": {
+      "model_type": "qwen-7b-chat",
+      "quant_bits": 4
+    },
+    "requirements":{
+        "gpu": "1"
+    },
+    "eval_requirements": {
+      "gpu": "1"
+    },
+    "eval_dataset": ["mmlu", "ceval", "gsm8k", "arc", "bbh"],
+    "experiment": [
+      {
+        "name": "gptq-pileval",
+        "args": {
+          "quant_method": "gptq",
+          "dataset": "pileval"
+        }
+      },
+      {
+        "name": "gptq-ms-bench-mini",
+        "args": {
+          "quant_method": "gptq",
+          "dataset": "ms-bench-mini"
+        }
+      },
+      {
+        "name": "awq-pileval",
+        "args": {
+          "quant_method": "awq",
+          "dataset": "pileval"
+        }
+      },
+      {
+        "name": "awq-ms-bench-mini",
+        "args": {
+          "quant_method": "awq",
+          "dataset": "ms-bench-mini"
+        }
+      }
+    ]
+}

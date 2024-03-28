@@ -1,0 +1,53 @@
+{
+    "cmd": "dpo",
+    "requirements":{
+        "gpu": "8",
+        "ddp": "8"
+    },
+    "eval_requirements": {
+      "gpu": "1"
+    },
+    "eval_dataset": ["mmlu", "ceval", "gsm8k", "arc", "bbh"],
+    "args": {
+        "model_type": "llama2-7b",
+        "ref_model_type": "llama2-7b",
+        "template_type": "llama",
+        "dataset": "hh-rlhf-cn",
+        "train_dataset_sample": 200000,
+        "truncation_strategy": "truncation_left",
+        "val_dataset_sample": 10000,
+        "num_train_epochs": 1,
+        "max_length": 1024,
+        "max_prompt_length": 512,
+        "check_dataset_strategy": "none",
+        "gradient_checkpointing": true,
+        "batch_size": 2,
+        "weight_decay": 0.01,
+        "learning_rate": 5e-5,
+        "gradient_accumulation_steps": 1,
+        "max_grad_norm": 1.0,
+        "warmup_ratio": 0.03,
+        "eval_steps": 2000,
+        "save_steps": 2000,
+        "save_total_limit": 2,
+        "logging_steps": 10,
+        "sft_type": "lora",
+        "lora_target_modules": "ALL EMBEDDING",
+        "lora_rank": 8,
+        "lora_alpha": 32
+    },
+    "experiment": [
+      {
+        "name": "dpolora",
+        "args": {
+          "sft_beta": 0.0
+        }
+      },
+      {
+        "name": "dpolora+sft_beta0.1",
+        "args": {
+          "sft_beta": 0.1
+        }
+      }
+    ]
+}

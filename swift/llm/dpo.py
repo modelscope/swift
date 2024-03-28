@@ -12,6 +12,7 @@ from swift.trainers.dpo_trainers import DPOTrainer
 from swift.utils import (check_json_format, get_dist_setting, get_logger,
                          get_main, get_model_info, is_ddp_plus_mp, is_dist,
                          is_master, plot_images, seed_everything, show_layers)
+from . import get_time_info
 from .tuner import prepare_model
 from .utils import (DPOArguments, Template, get_dataset, get_model_tokenizer,
                     get_template, set_generation_config)
@@ -177,6 +178,7 @@ def llm_dpo(args: DPOArguments) -> str:
     logger.info(f'last_model_checkpoint: {last_model_checkpoint}')
     logger.info(
         f'best_model_checkpoint: {trainer.state.best_model_checkpoint}')
+    train_time = get_time_info(trainer.state.log_history, len(train_dataset))
     # Visualization
     if is_master():
         images_dir = os.path.join(args.output_dir, 'images')
@@ -185,14 +187,21 @@ def llm_dpo(args: DPOArguments) -> str:
         if args.push_to_hub:
             trainer._add_patterns_to_gitignore(['images/'])
             trainer.push_to_hub()
-    return {
+    run_info = {
+        'memory': trainer.perf['memory'],
+        'train_time': train_time,
         'last_model_checkpoint': last_model_checkpoint,
         'best_model_checkpoint': trainer.state.best_model_checkpoint,
         'best_metric': trainer.state.best_metric,
         'global_step': trainer.state.global_step,
         'log_history': trainer.state.log_history,
         'model_info': model_info,
+        'dataset_info': trainer.dataset_info,
     }
+    jsonl_path = os.path.join(args.output_dir, 'logging.jsonl')
+    with open(jsonl_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(run_info) + '\n')
+    return run_info
 
 
 dpo_main = get_main(DPOArguments, llm_dpo)

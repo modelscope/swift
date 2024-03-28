@@ -2,12 +2,12 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 from dataclasses import asdict, dataclass, field
+from functools import reduce
 
 import torch
 from packaging import version
-from peft.tuners.lora import LoraLayer
+from transformers import Trainer
 
-from swift import LoraConfig
 from .lora_layers import *  # noqa
 from .utils import SwiftAdapter, SwiftConfig, SwiftOutput, set_adapter
 
@@ -52,9 +52,11 @@ class LoRAConfig(LoraConfig, SwiftConfig):
             'The lora dtype, default None means following the original layer\'s dtype'
         })
 
-    lr_ratio: float = field(
-        default=2.0**4,
-        metadata={'help': 'The lora learning_rate ratio of lora_A to lora_B'})
+    lorap_lr_ratio: float = field(
+        default=2.0**4, metadata={'help': 'The lr ratio of lora_B in lora+'})
+
+    lorap_emb_lr: float = field(
+        default=1e-6, metadata={'help': 'The lr for embedding in lora+'})
 
     def __post_init__(self):
         super().__post_init__()
@@ -85,6 +87,14 @@ class LoRA(SwiftAdapter):
 
     @staticmethod
     def prepare_model(model: nn.Module, config: LoRAConfig, adapter_name: str):
+        assert version.parse(peft.__version__) < version.parse(
+            '0.10.0'), 'The swift LoRA adapter only supports peft<0.10.0'
+
+        if config.use_qa_lora:
+            auto_gptq_config = get_quantization_config(model, method='gptq')
+            if auto_gptq_config:
+                config.group_size = getattr(auto_gptq_config, 'group_size',
+                                            None)
         LoraModel(model, config, adapter_name)
 
         def state_dict_callback(state_dict, adapter_name, cfg=None):
@@ -96,21 +106,65 @@ class LoRA(SwiftAdapter):
                                    cfg.bias if cfg else config.bias)
 
         def optimizer_group_callback(model, **defaults):
-            if config.lr_ratio is not None:
-                params = []
-                names = set()
-                for name, param in model.named_parameters():
-                    if adapter_name in name and ('lora_B' in name or
-                                                 'lora_embedding_B' in name):
-                        params.append(param)
-                        names.add(name)
-                if params:
-                    assert 'lr' in defaults
-                    return names, {
-                        'params': params,
-                        'lr': defaults['lr'] * config.lr_ratio
-                    }
-            return None, None
+            if config.lorap_lr_ratio is None:
+                return None, None
+
+            def get_module(name):
+                parent_idx = 2 if 'lora' in name else 1
+                module_names = name.split(sep='.')[:-parent_idx]
+                module = reduce(getattr, module_names, model)
+                return module
+
+            all_params = set()
+            param_groups = {
+                'groupA': {},
+                'groupB': {},
+                'groupB_no_decay': {},
+                'embedding': {},
+            }
+
+            decay_parameters = Trainer.get_decay_parameter_names(None, model)
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                module = get_module(name)
+                if isinstance(module, Embedding):
+                    param_groups['embedding'][name] = param
+                elif 'lora_B' in name or param.ndim == 1:
+                    if name in decay_parameters:
+                        param_groups['groupB'][name] = param
+                    else:
+                        param_groups['groupB_no_decay'][name] = param
+                else:
+                    param_groups['groupA'][name] = param
+                all_params.add(name)
+
+            lr = defaults['lr']
+            weight_decay = defaults.get('weight_decay', 0.0)
+
+            param_groups = [
+                {
+                    'params': list(param_groups['groupA'].values()),
+                    'weight_decay': weight_decay,
+                    'lr': lr,
+                },
+                {
+                    'params': list(param_groups['embedding'].values()),
+                    'weight_decay': weight_decay,
+                    'lr': config.lorap_emb_lr,
+                },
+                {
+                    'params': list(param_groups['groupB'].values()),
+                    'weight_decay': weight_decay,
+                    'lr': lr * config.lorap_lr_ratio,
+                },
+                {
+                    'params': list(param_groups['groupB_no_decay'].values()),
+                    'weight_decay': 0.0,
+                    'lr': lr * config.lorap_lr_ratio,
+                },
+            ]
+            return all_params, param_groups
 
         return SwiftOutput(config, state_dict_callback,
                            mark_trainable_callback, optimizer_group_callback)

@@ -6,9 +6,9 @@ import transformers
 from packaging import version
 
 from swift.trainers import TrainerCallback
-from swift.tuners import (AdaLoraConfig, IA3Config, LongLoRAConfig,
-                          LongLoRAModelType, LoraConfig, LoRAConfig,
-                          NEFTuneConfig, Swift)
+from swift.tuners import (AdaLoraConfig, AdapterConfig, IA3Config,
+                          LongLoRAConfig, LongLoRAModelType, LoraConfig,
+                          LoRAConfig, NEFTuneConfig, Swift)
 from swift.tuners.llamapro import LLaMAProConfig
 from swift.tuners.module_mapping import MODEL_KEYS_MAPPING
 from swift.utils import (activate_model_parameters, freeze_model_parameters,
@@ -71,23 +71,19 @@ def prepare_model(model, args: SftArguments):
                 'lora_dropout': args.lora_dropout_p,
                 'bias': args.lora_bias_trainable,
                 'modules_to_save': args.lora_modules_to_save,
-                'layers_to_transform': args.lora_layers_to_transform,
-                'layers_pattern': args.lora_layers_pattern,
-                'rank_pattern': args.lora_rank_pattern,
-                'alpha_pattern': args.lora_alpha_pattern,
-                'loftq_config': args.lora_loftq_config,
                 'use_rslora': args.use_rslora,
                 'use_dora': args.use_dora,
+                'lorap_lr_ratio': args.lora_lr_ratio,
             }
             if args.sft_type == 'lora':
                 if args.tuner_backend == 'swift':
-                    lora_kwargs['lr_ratio'] = args.lora_lr_ratio
                     lora_config = LoRAConfig(
                         lora_dtype=args.lora_dtype, **lora_kwargs)
                 elif args.tuner_backend == 'peft':
-                    assert args.lora_lr_ratio is None, 'Please use tuner_backend="swift" to use LoRA+'
                     lora_config = LoraConfig(
-                        task_type='CAUSAL_LM', **lora_kwargs)
+                        task_type='CAUSAL_LM',
+                        lora_dtype=args.lora_dtype,
+                        **lora_kwargs)
                 model = Swift.prepare_model(model, lora_config)
                 logger.info(f'lora_config: {lora_config}')
             elif args.sft_type == 'longlora':
@@ -100,17 +96,6 @@ def prepare_model(model, args: SftArguments):
                     **lora_kwargs)
                 model = Swift.prepare_model(model, longlora_config)
                 logger.info(f'longlora_config: {longlora_config}')
-            elif args.sft_type == 'qalora':
-                assert args.tuner_backend == 'swift'
-                assert getattr(
-                    model, 'quantization_method',
-                    None) == 'gptq', 'qalora must be used with auto_gptq'
-                qalora_config = LoRAConfig(
-                    lora_dtype=args.lora_dtype,
-                    use_qa_lora=True,
-                    **lora_kwargs)
-                model = Swift.prepare_model(model, qalora_config)
-                logger.info(f'qalora_config: {qalora_config}')
             elif args.sft_type == 'adalora':
                 lora_kwargs['rank_pattern'] = None
                 adalora_config = AdaLoraConfig(
@@ -149,6 +134,24 @@ def prepare_model(model, args: SftArguments):
                     num_groups=args.llamapro_num_groups)
                 model = Swift.prepare_model(model, llamapro_config)
                 logger.info(f'llamapro_config: {llamapro_config}')
+            elif args.sft_type == 'adapter':
+                model_type = args.model_type or args.model_id_or_path
+                for key in MODEL_KEYS_MAPPING.keys():
+                    if key in model_type.lower():
+                        model_type = key
+                        break
+
+                assert model_type in MODEL_KEYS_MAPPING
+                mlp_key = MODEL_KEYS_MAPPING[model_type].mlp
+                mlp_key = mlp_key.split('.{}.')[1]
+                adapter_config = AdapterConfig(
+                    dim=model.config.hidden_size,
+                    target_modules=[mlp_key],
+                    hidden_pos=0,
+                    adapter_length=args.adapter_length,
+                    act_layer=args.adapter_act)
+                model = Swift.prepare_model(model, adapter_config)
+                logger.info(f'adapter_config: {adapter_config}')
         else:
             model = Swift.from_pretrained(
                 model, args.resume_from_checkpoint, is_trainable=True)

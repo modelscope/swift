@@ -1,0 +1,41 @@
+{
+    "cmd": "sft",
+    "requirements":{
+        "gpu": "1",
+        "ddp": "1"
+    },
+    "eval_requirements": {
+      "gpu": "1"
+    },
+    "eval_dataset": ["mmlu", "ceval", "gsm8k", "arc", "bbh"],
+    "args": {
+      "model_type": "qwen1half-7b-chat-int8",
+      "dataset": "ms-agent",
+      "train_dataset_mix_ratio": 2.0,
+      "batch_size": 2,
+      "max_length": 2048,
+      "use_loss_scale": true,
+      "gradient_accumulation_steps": 4,
+      "learning_rate": 5e-5,
+      "use_flash_attn": true,
+      "eval_steps": 2000,
+      "save_steps": 2000,
+      "train_dataset_sample": -1,
+      "val_dataset_sample": 5000,
+      "num_train_epochs": 2,
+      "gradient_checkpointing": true,
+      "weight_decay": 0.01,
+      "warmup_ratio": 0.03,
+      "save_total_limit": 2,
+      "logging_steps": 10,
+      "sft_type": "lora",
+      "lora_target_modules": "ALL",
+      "lora_rank": 8,
+      "lora_alpha": 32
+    },
+    "experiment": [
+      {
+        "name": "qwen1half-7b-chat-int8"
+      }
+    ]
+}

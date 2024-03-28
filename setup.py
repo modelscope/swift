@@ -123,9 +123,11 @@ if __name__ == '__main__':
     all_requires = []
     extra_requires['llm'], _ = parse_requirements('requirements/llm.txt')
     extra_requires['aigc'], _ = parse_requirements('requirements/aigc.txt')
+    extra_requires['eval'], _ = parse_requirements('requirements/eval.txt')
     all_requires.extend(install_requires)
     all_requires.extend(extra_requires['llm'])
     all_requires.extend(extra_requires['aigc'])
+    all_requires.extend(extra_requires['eval'])
     extra_requires['all'] = all_requires
 
     setup(

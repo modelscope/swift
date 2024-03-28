@@ -26,10 +26,32 @@ class DPOTrainer(PushToMsHubMixin, SwiftMixin, HFDPOTrainer):
         self.template = template
         self.sft_beta = sft_beta
         super().__init__(*args, **kwargs)
-        self.stat_dataset(self.train_dataset)
-        self.stat_dataset(self.eval_dataset)
+        train_ds_info = self.stat_dataset(self.train_dataset)
+        val_ds_info = self.stat_dataset(self.eval_dataset)
+        self.dataset_info = {
+            'train_dataset': train_ds_info,
+            'val_dataset': val_ds_info
+        }
         if test_oom_error:
             self.train_dataset = sort_by_max_length(self.train_dataset, 20000)
+        # performance
+        self.perf: Dict[str, Any] = {
+            'gen_time':
+            0.,
+            'gen_len':
+            0,
+            'memory': {},
+            'model':
+            self.model.get_trainable_parameters() if hasattr(
+                self.model, 'get_trainable_parameters') else None,
+        }
+
+    def train(self, *args, **kwargs) -> torch.Tensor:
+        res = super().train(*args, **kwargs)
+        for i in range(torch.cuda.device_count()):
+            self.perf['memory'][
+                f'cuda:{i}'] = f'{torch.cuda.max_memory_reserved(i)/1024/1024/1024:.2f}GiB'
+        return res
 
     def concat_template(self, feature):
         query: Optional[str] = feature.get('query', None)
@@ -187,7 +209,7 @@ class DPOTrainer(PushToMsHubMixin, SwiftMixin, HFDPOTrainer):
         return batch
 
     @staticmethod
-    def stat_dataset(llm_dataset) -> None:
+    def stat_dataset(llm_dataset) -> Any:
         _token_len = []
         from datasets import Dataset as HfDataset
         from swift.utils.np_utils import stat_array
@@ -204,6 +226,7 @@ class DPOTrainer(PushToMsHubMixin, SwiftMixin, HFDPOTrainer):
                         len(d['rejected_input_ids'])))
         _, stat_str = stat_array(_token_len)
         logger.info(f'Dataset Token Length: {stat_str}')
+        return stat_str
 
     def get_batch_loss_metrics(
         self,

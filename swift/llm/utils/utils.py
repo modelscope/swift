@@ -706,6 +706,15 @@ def inference(model: PreTrainedModel,
         generation_config.bos_token_id = tokenizer.bos_token_id
     if generation_config.max_new_tokens is not None:
         generation_config.max_length = 20  # fix max_length, max_new_tokens warning
+    if generation_config.max_new_tokens is not None and hasattr(
+            model.config, 'max_position_embeddings'
+    ) and token_len + generation_config.max_new_tokens > model.config.max_position_embeddings:
+        generation_config.max_new_tokens = model.config.max_position_embeddings - token_len
+        if generation_config.max_new_tokens <= 0:
+            raise AssertionError(
+                'Current sentence length exceeds'
+                f'the model max_position_embeddings: {model.config.max_position_embeddings}'
+            )
     if template.suffix[-1] not in stop_words:
         stop_words.append(template.suffix[-1])
     stopping_criteria = StoppingCriteriaList(

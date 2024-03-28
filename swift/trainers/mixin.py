@@ -619,14 +619,16 @@ class SwiftMixin:
                     f'but now is {transformers.__version__}')
                 return super().create_optimizer()
 
-            decay_parameters = self.get_decay_parameter_names(opt_model)
-            if isinstance(self.model, SwiftModel):
-                # Lora+ parameter groups (or a default one)
+            optimizer_grouped_parameters = None
+            if hasattr(self.model, 'create_optimizer_param_groups'):
+                # Lora+ parameter groups
                 optimizer_grouped_parameters = self.model.create_optimizer_param_groups(
                     lr=self.args.learning_rate,
                     weight_decay=self.args.weight_decay)
-            else:
+
+            if optimizer_grouped_parameters is None:
                 # Default parameter groups
+                decay_parameters = self.get_decay_parameter_names(opt_model)
                 optimizer_grouped_parameters = [
                     {
                         'params': [
