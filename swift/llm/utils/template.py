@@ -1548,7 +1548,7 @@ class InternvlTemplate(Template):
         idx_list = _findall(input_ids, -100)
         labels = inputs.get('labels')
         from .vision_utils import transform_image
-        pixel_values = [transform_image(image) for image in example.get('images', [])]
+        pixel_values = [transform_image(image, 12) for image in example.get('images', [])]
         if pixel_values:
             pixel_values = torch.cat(pixel_values, dim=0)
             image_bs = pixel_values.shape[0]
@@ -1563,18 +1563,9 @@ class InternvlTemplate(Template):
             inputs['labels'] = labels
 
             inputs['pixel_values'] = pixel_values.to(self.model.dtype)
-            inputs['image_flags'] = torch.ones(image_bs)
 
         inputs.pop('loss_scale', None)
         return inputs, {}
-
-    def data_collator(self, batch: List[Dict[str, Any]], padding_to: Optional[int] = None) -> Dict[str, Any]:
-        res = super().data_collator(batch, padding_to)
-        if any('pixel_values' in b for b in batch):
-            image_flags = [b['image_flags'] for b in batch if 'image_flags' in b]
-            if image_flags:
-                res['image_flags'] = torch.concat(image_flags)
-        return res
 
     @staticmethod
     def get_generate_ids(generate_ids: Tensor, input_token_len: int) -> List[int]:
@@ -1628,48 +1619,50 @@ class Internvl2Template(InternvlTemplate):
         input_ids = inputs['input_ids']
         idx_list = _findall(input_ids, -100)
         labels = inputs.get('labels')
+        tokenizer = self.tokenizer
+        model = self.model
         from .vision_utils import transform_image
-        pixel_values_images = [transform_image(image) for image in example.get('images', [])]
+        pixel_values_images = [transform_image(image, 12) for image in example.get('images', [])]
         videos_path = example.get('videos', [])
         if pixel_values_images:
             pixel_values = pixel_values_images
             assert len(pixel_values) == len(
                 idx_list), f'len(pixel_values): {len(pixel_values)}, len(idx_list): {len(idx_list)}'
-            added_tokens_len = 0
-            patches = 0
-            for idx, pv in zip(idx_list, pixel_values):
-                patches += pv.shape[0]
-                img_tokens: List[int] = self.tokenizer.encode(
-                    '<img>' + '<IMG_CONTEXT>' * self.num_image_token * pv.shape[0] + '</img>\n',
-                    add_special_tokens=False)
-                input_ids = input_ids[:idx + added_tokens_len] + img_tokens + input_ids[idx + added_tokens_len + 1:]
-                if labels is not None:
-                    labels = labels[:idx + added_tokens_len] + [-100] * len(img_tokens) + labels[idx + added_tokens_len
-                                                                                                 + 1:]
-                added_tokens_len += len(img_tokens) - 1
-            inputs['input_ids'] = input_ids
-            inputs['labels'] = labels
-            inputs['pixel_values'] = torch.cat(pixel_values).to(self.model.dtype)
-            inputs['image_flags'] = torch.ones(patches)
+            num_patches = [pv.shape[0] for pv in pixel_values]
+            pixel_values = torch.cat(pixel_values)
         elif videos_path:
             assert len(videos_path) == 1, f'videos_path: {videos_path}'
             from .vision_utils import load_video
             pixel_values, num_patches = load_video(videos_path[0], num_segments=self.video_segments)
-            assert len(num_patches) == len(
-                idx_list), f'len(num_patches): {len(num_patches)}, len(idx_list): {len(idx_list)}'
-            added_tokens_len = 0
-            for idx, num_patch in zip(idx_list, num_patches):
-                img_tokens: List[int] = self.tokenizer.encode(
-                    '<img>' + '<IMG_CONTEXT>' * self.num_image_token * num_patch + '</img>\n', add_special_tokens=False)
-                input_ids = input_ids[:idx + added_tokens_len] + img_tokens + input_ids[idx + added_tokens_len + 1:]
-                if labels is not None:
-                    labels = labels[:idx + added_tokens_len] + [-100] * len(img_tokens) + labels[idx + added_tokens_len
-                                                                                                 + 1:]
-                added_tokens_len += len(img_tokens) - 1
-            inputs['input_ids'] = input_ids
-            inputs['labels'] = labels
-            inputs['pixel_values'] = pixel_values.to(self.model.dtype)
-            inputs['image_flags'] = torch.ones(sum(num_patches))
+        else:
+            pixel_values = None
+            num_patches = []
+        assert len(num_patches) == len(
+            idx_list), f'len(num_patches): {len(num_patches)}, len(idx_list): {len(idx_list)}'
+        added_tokens_len = 0
+        for idx, num_patch in zip(idx_list, num_patches):
+            img_tokens: List[int] = tokenizer.encode(
+                '<img>' + '<IMG_CONTEXT>' * self.num_image_token * num_patch + '</img>', add_special_tokens=False)
+            input_ids = input_ids[:idx + added_tokens_len] + img_tokens + input_ids[idx + added_tokens_len + 1:]
+            if labels is not None:
+                labels = labels[:idx + added_tokens_len] + [-100] * len(img_tokens) + labels[idx + added_tokens_len
+                                                                                             + 1:]
+            added_tokens_len += len(img_tokens) - 1
+
+        embedding = model.get_input_embeddings()
+        device = embedding.weight.device
+        dtype = model.dtype
+        inputs['input_ids'] = input_ids
+        input_ids = torch.tensor(input_ids, device=device)
+        inputs_embeds = embedding(input_ids)
+        if pixel_values_images or videos_path:
+            pixel_values = pixel_values.to(dtype=dtype, device=device)
+            vit_embeds = model.extract_feature(pixel_values)
+            selected = (input_ids == tokenizer.encode('<IMG_CONTEXT>', add_special_tokens=False)[0])
+            inputs_embeds[selected] = vit_embeds.reshape(-1, vit_embeds.shape[-1])
+        inputs_embeds = inputs_embeds.detach()
+        inputs['labels'] = labels
+        inputs['inputs_embeds'] = inputs_embeds
         inputs.pop('loss_scale', None)
         return inputs, {}
 
@@ -1696,14 +1689,38 @@ class Internvl2Phi3Template(Internvl2Template):
 
 
 register_template(
-    TemplateType.internvl, InternvlTemplate(), use_model=True, lazy_tokenize=True, infer_media_type='dialogue')
+    TemplateType.internvl,
+    InternvlTemplate(),
+    use_model=True,
+    lazy_tokenize=True,
+    infer_media_type='dialogue',
+    dataloader_num_workers=0,
+    dataloader_pin_memory=False)
 
 register_template(
-    TemplateType.internvl_phi3, InternvlPhi3Template(), use_model=True, lazy_tokenize=True, infer_media_type='dialogue')
+    TemplateType.internvl_phi3,
+    InternvlPhi3Template(),
+    use_model=True,
+    lazy_tokenize=True,
+    infer_media_type='dialogue',
+    dataloader_num_workers=0,
+    dataloader_pin_memory=False)
 
-register_template(TemplateType.internvl2, Internvl2Template(), use_model=True, lazy_tokenize=True)
+register_template(
+    TemplateType.internvl2,
+    Internvl2Template(),
+    use_model=True,
+    lazy_tokenize=True,
+    dataloader_num_workers=0,
+    dataloader_pin_memory=False)
 
-register_template(TemplateType.internvl2_phi3, Internvl2Phi3Template(), use_model=True, lazy_tokenize=True)
+register_template(
+    TemplateType.internvl2_phi3,
+    Internvl2Phi3Template(),
+    use_model=True,
+    lazy_tokenize=True,
+    dataloader_num_workers=0,
+    dataloader_pin_memory=False)
 
 
 class FlorenceTemplate(Template):

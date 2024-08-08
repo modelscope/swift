@@ -127,7 +127,7 @@ def _read_batch(path_list: List[Union[str, 'PIL.Image.Image', None]],
     return res
 
 
-def transform_image(image, input_size=448, max_num=6):
+def transform_image(image, input_size=448, max_num=12):
     transform = build_transform(input_size=input_size)
     images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
     pixel_values = [transform(image) for image in images]
